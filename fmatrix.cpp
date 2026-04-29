@@ -5,50 +5,45 @@
 #include <ctime>
 #include <chrono>
 #include <thread>
+#include <clocale>
 
 #define DEFAULT_SPEED 50
 
 struct Droplet {
     int x, y, length, speed, counter;
-    int color_offset; // Для режима радуги
+    int color_offset;
 };
 
+const wchar_t kana[] = L"ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789";
+
 void print_help() {
-    std::cout << "fmatrix - Fast Matrix C++ Implementation\n"
-              << "Usage: fmatrix [options]\n"
+    std::cout << "Usage: fmatrix -[bjLshV] [-u delay] [-C color/-r]\n"
               << "Options:\n"
-              << "  -u delay      Screen update delay (1-100, default 50ms)\n"
-              << "  -C color      Color: green, red, blue, white, yellow, cyan, magenta\n"
-              << "  -r            Rainbow mode: colors shift as they fall\n"
-              << "  -b            Enable bold characters\n"
-              << "  -s            Screensaver mode: exit on any key\n"
-              << "  -h            Print usage and exit\n"
-              << "  -V            Print version information and exit\n";
+              << "  -u delay      Update delay (1-100ms, default 50)\n"
+              << "  -C color      green, red, blue, white, yellow, cyan, magenta\n"
+              << "  -r            Smooth rainbow mode\n"
+              << "  -j            Japanese characters (Katakana)\n"
+              << "  -L            Lock mode (ignore input)\n"
+              << "  -b            Bold characters\n"
+              << "  -s            Screensaver mode\n"
+              << "  -h            Help\n"
+              << "  -V            Version\n";
 }
 
 int main(int argc, char **argv) {
+    setlocale(LC_ALL, "");
     int speed = DEFAULT_SPEED;
     int base_color = COLOR_GREEN;
-    bool rainbow = false;
-    bool screensaver = false;
-    bool bold = false;
-
-    static struct option long_options[] = {
-        {"speed", required_argument, 0, 'u'},
-        {"color", required_argument, 0, 'C'},
-        {"rainbow", no_argument, 0, 'r'},
-        {"bold", no_argument, 0, 'b'},
-        {"screensaver", no_argument, 0, 's'},
-        {"help", no_argument, 0, 'h'},
-        {"version", no_argument, 0, 'V'},
-        {0, 0, 0, 0}};
+    bool rainbow = false, screensaver = false, bold = false, japanese = false, lock_mode = false;
 
     int opt;
-    while ((opt = getopt_long(argc, argv, "u:C:rbshV", long_options, nullptr)) != -1) {
+    while ((opt = getopt(argc, argv, "u:C:rbjLshV")) != -1) {
         switch (opt) {
             case 'u': speed = std::stoi(optarg); break;
             case 'r': rainbow = true; break;
             case 'b': bold = true; break;
+            case 'j': japanese = true; break;
+            case 'L': lock_mode = true; break;
             case 's': screensaver = true; break;
             case 'C': {
                 std::string c = optarg;
@@ -58,12 +53,10 @@ int main(int argc, char **argv) {
                 else if (c == "cyan") base_color = COLOR_CYAN;
                 else if (c == "magenta") base_color = COLOR_MAGENTA;
                 else if (c == "white") base_color = COLOR_WHITE;
-                else base_color = COLOR_GREEN;
                 break;
             }
             case 'h': print_help(); return 0;
-            case 'V': std::cout << "fmatrix v1.2.0 (Pro Edition)\n"; return 0;
-            default: return 1;
+            case 'V': std::cout << "fmatrix v1.1\n"; return 0;
         }
     }
 
@@ -74,11 +67,13 @@ int main(int argc, char **argv) {
     start_color();
     use_default_colors();
 
-    // Инициализация цветов
-    init_pair(1, base_color, -1); // Основной
-    init_pair(2, COLOR_WHITE, -1); // Голова
-    // Пары для радуги
-    for(int i = 1; i <= 6; i++) init_pair(10+i, i, -1);
+    init_pair(1, base_color, -1);
+    init_pair(2, COLOR_WHITE, -1);
+    
+    if (rainbow) {
+        std::vector<int> rb = {160, 196, 202, 208, 214, 220, 226, 190, 154, 118, 82, 46, 47, 48, 49, 45, 39, 33, 27, 21, 57, 93, 129, 165};
+        for (int i = 0; i < (int)rb.size(); i++) init_pair(10 + i, rb[i], -1);
+    }
 
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
@@ -87,12 +82,17 @@ int main(int argc, char **argv) {
     auto init_droplets = [&]() {
         droplets.clear();
         for (int i = 0; i < cols; i += 2) {
-            droplets.push_back({i, rand() % rows, rand() % (rows / 2) + 5, rand() % 3 + 1, 0, rand() % 6});
+            droplets.push_back({i, rand() % rows, rand() % (rows / 2) + 5, rand() % 3 + 1, 0, rand() % 24});
         }
     };
 
     init_droplets();
     srand(time(NULL));
+
+    auto get_char = [&](cchar_t* res, attr_t attr, short pair) {
+        wchar_t wc = japanese ? kana[rand() % (sizeof(kana)/sizeof(wchar_t) - 1)] : (wchar_t)(33 + rand() % 94);
+        setcchar(res, &wc, attr, pair, NULL);
+    };
 
     while (true) {
         int new_rows, new_cols;
@@ -106,32 +106,21 @@ int main(int argc, char **argv) {
         for (auto &d : droplets) {
             if (++d.counter >= d.speed) {
                 d.counter = 0;
+                int pair = rainbow ? (10 + (d.y + d.color_offset) % 24) : 1;
+                cchar_t gc;
 
-                // Выбор цвета (Радуга или статика)
-                int pair = rainbow ? (11 + (d.y + d.color_offset) % 6) : 1;
-                attron(COLOR_PAIR(pair));
-                if (bold) attron(A_BOLD);
-
-                int body_pos = (d.y - 1 < 0) ? rows - 1 : d.y - 1;
-                mvaddch(body_pos, d.x, 33 + rand() % 94);
+                attr_t body_attr = (bold ? A_BOLD : A_NORMAL);
+                get_char(&gc, body_attr, pair);
+                mvadd_wch((d.y - 1 < 0 ? rows - 1 : d.y - 1), d.x, &gc);
                 
-                if (bold) attroff(A_BOLD);
-                attroff(COLOR_PAIR(pair));
-
-                // Голова всегда белая и жирная
-                attron(COLOR_PAIR(2) | A_BOLD);
-                mvaddch(d.y, d.x, 33 + rand() % 94);
-                attroff(COLOR_PAIR(2) | A_BOLD);
+                get_char(&gc, A_BOLD, 2);
+                mvadd_wch(d.y, d.x, &gc);
 
                 int tail = d.y - d.length;
-                if (tail >= 0) mvaddch(tail, d.x, ' ');
-                else mvaddch(tail + rows, d.x, ' ');
+                mvaddch((tail >= 0 ? tail : tail + rows), d.x, ' ');
 
-                d.y++;
-                if (d.y >= rows) {
-                    d.y = 0;
-                    d.color_offset = rand() % 6; // Смена начального цвета радуги
-                }
+                d.y = (d.y + 1) % rows;
+                if (d.y == 0) d.color_offset = rand() % 24;
             }
         }
 
@@ -139,8 +128,9 @@ int main(int argc, char **argv) {
         std::this_thread::sleep_for(std::chrono::milliseconds(speed));
         
         int ch = getch();
-        if (screensaver && ch != ERR) break;
-        if (ch == 'q') break;
+        if (!lock_mode) {
+            if (ch == 'q' || (screensaver && ch != ERR)) break;
+        }
     }
 
     endwin();

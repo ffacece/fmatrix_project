@@ -13,7 +13,6 @@ Optimized for performance and transparency.
    `sudo pacman -S ncurses`
 2. Clone and build:
    ```bash
-   git clone [https://github.com/ffacece/fmatrix_project](https://github.com/ffacece/fmatrix_project)
+   git clone https://github.com/ffacece/fmatrix_project
    cd fmatrix_project
-   make
    sudo make install
