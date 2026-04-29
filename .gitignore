@@ -1,0 +1,4 @@
+fmatrix
+*.o
+.vscode/
+build/
