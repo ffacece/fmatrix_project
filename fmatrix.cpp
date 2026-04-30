@@ -64,7 +64,7 @@ int main(int argc, char **argv) {
                 break;
             }
             case 'h': print_help(); return 0;
-            case 'V': std::cout << "fmatrix v1.2.1\n"; return 0;
+            case 'V': std::cout << "fmatrix v1.5.0\n"; return 0;
             default: return 1;
         }
     }
