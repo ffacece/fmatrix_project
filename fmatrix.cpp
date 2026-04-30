@@ -17,27 +17,34 @@ struct Droplet {
 const wchar_t kana[] = L"ｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝ0123456789";
 
 void print_help() {
-    std::cout << "Usage: fmatrix -[bjLshV] [-u delay] [-C color/-r]\n"
+    std::cout << "Usage: fmatrix -[bjLshVT] [-u delay] [-C color/-r]\n"
+              << "fmatrix - Fast Matrix digital rain implementation\n\n"
               << "Options:\n"
-              << "  -u delay      Update delay (1-100ms, default 50)\n"
-              << "  -C color      green, red, blue, white, yellow, cyan, magenta\n"
-              << "  -r            Smooth rainbow mode\n"
-              << "  -j            Japanese characters (Katakana)\n"
-              << "  -L            Lock mode (ignore input)\n"
-              << "  -b            Bold characters\n"
-              << "  -s            Screensaver mode\n"
-              << "  -h            Help\n"
-              << "  -V            Version\n";
+              << "  -u delay      Set update delay in ms (1-100, default: 50)\n"
+              << "  -C color      Set base color (green, red, blue, yellow, cyan, magenta, white)\n"
+              << "  -T            Enable transparent background on startup\n"
+              << "  -j            Use Japanese Katakana characters\n"
+              << "  -r            Enable smooth rainbow mode\n"
+              << "  -b            Enable bold characters\n"
+              << "  -L            Lock mode (ignores input except system signals)\n"
+              << "  -s            Screensaver mode (exit on any key press)\n"
+              << "  -h            Display this help menu\n"
+              << "  -V            Display version information\n\n"
+              << "In-game controls:\n"
+              << "  'q'           Quit the program\n"
+              << "  't'           Toggle background transparency\n";
 }
 
 int main(int argc, char **argv) {
     setlocale(LC_ALL, "");
+    
     int speed = DEFAULT_SPEED;
     int base_color = COLOR_GREEN;
+    bool is_transparent = false;
     bool rainbow = false, screensaver = false, bold = false, japanese = false, lock_mode = false;
 
     int opt;
-    while ((opt = getopt(argc, argv, "u:C:rbjLshV")) != -1) {
+    while ((opt = getopt(argc, argv, "u:C:rbjLshVT")) != -1) {
         switch (opt) {
             case 'u': speed = std::stoi(optarg); break;
             case 'r': rainbow = true; break;
@@ -45,6 +52,7 @@ int main(int argc, char **argv) {
             case 'j': japanese = true; break;
             case 'L': lock_mode = true; break;
             case 's': screensaver = true; break;
+            case 'T': is_transparent = true; break; 
             case 'C': {
                 std::string c = optarg;
                 if (c == "red") base_color = COLOR_RED;
@@ -56,7 +64,8 @@ int main(int argc, char **argv) {
                 break;
             }
             case 'h': print_help(); return 0;
-            case 'V': std::cout << "fmatrix v1.1\n"; return 0;
+            case 'V': std::cout << "fmatrix v1.6.0\n"; return 0;
+            default: return 1;
         }
     }
 
@@ -67,13 +76,21 @@ int main(int argc, char **argv) {
     start_color();
     use_default_colors();
 
-    init_pair(1, base_color, -1);
-    init_pair(2, COLOR_WHITE, -1);
-    
-    if (rainbow) {
-        std::vector<int> rb = {160, 196, 202, 208, 214, 220, 226, 190, 154, 118, 82, 46, 47, 48, 49, 45, 39, 33, 27, 21, 57, 93, 129, 165};
-        for (int i = 0; i < (int)rb.size(); i++) init_pair(10 + i, rb[i], -1);
-    }
+    /**
+     * @param transparent If true, uses terminal's default background (-1).
+     */
+    auto update_colors = [&](bool transparent) {
+        int bg = transparent ? -1 : COLOR_BLACK;
+        init_pair(1, base_color, bg);
+        init_pair(2, COLOR_WHITE, bg);
+        if (rainbow) {
+            std::vector<int> rb = {160, 196, 202, 208, 214, 220, 226, 190, 154, 118, 82, 46, 47, 48, 49, 45, 39, 33, 27, 21, 57, 93, 129, 165};
+            for (int i = 0; i < (int)rb.size(); i++) init_pair(10 + i, rb[i], bg);
+        }
+        bkgd(COLOR_PAIR(1) | ' ');
+    };
+
+    update_colors(is_transparent);
 
     int rows, cols;
     getmaxyx(stdscr, rows, cols);
@@ -97,10 +114,12 @@ int main(int argc, char **argv) {
     while (true) {
         int new_rows, new_cols;
         getmaxyx(stdscr, new_rows, new_cols);
+        
         if (new_rows != rows || new_cols != cols) {
             rows = new_rows; cols = new_cols;
             init_droplets();
             clear();
+            bkgd(COLOR_PAIR(1) | ' '); 
         }
 
         for (auto &d : droplets) {
@@ -130,6 +149,12 @@ int main(int argc, char **argv) {
         int ch = getch();
         if (!lock_mode) {
             if (ch == 'q' || (screensaver && ch != ERR)) break;
+            
+            if (ch == 't') {
+                is_transparent = !is_transparent;
+                update_colors(is_transparent);
+                clear(); 
+            }
         }
     }
 
