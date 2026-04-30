@@ -1,8 +1,8 @@
 CXX = g++
-CXXFLAGS = -O3
-LDFLAGS = -lncurses
+CXXFLAGS = -O3 -std=c++17
+LDFLAGS = -lncursesw 
 
-all: fmatrix
+all: clean fmatrix
 
 fmatrix: fmatrix.cpp
 	$(CXX) $(CXXFLAGS) fmatrix.cpp -o fmatrix $(LDFLAGS)
