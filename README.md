@@ -1,4 +1,4 @@
-# fmatrix 🚀
+# fmatrix
 Fast and smooth Matrix digital rain implementation in C++. 
 Optimized for performance and transparency.
 
